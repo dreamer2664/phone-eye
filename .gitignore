@@ -1,0 +1,50 @@
+# phone-eye runtime/build artefacts. The rule (inherited from pc-eye): anything a run
+# WRITES — logs, screenshots, binaries, keys — never enters git. A screenshot of a
+# human's phone in a commit is a privacy incident waiting for an audience.
+
+# Android / Gradle
+.gradle/
+build/
+app/build/
+local.properties
+*.apk
+*.aab
+captures/
+.cxx/
+.externalNativeBuild/
+
+# The fetched tunnel binary (37 MB; Gradle/scripts download + verify it)
+app/src/main/jniLibs/arm64-v8a/libcloudflared.so
+cloudflared
+cloudflared.exe
+
+# Signing material — lives in GitHub Actions secrets + the owner's backup. NEVER here.
+*.p12
+*.keystore
+*.jks
+phone-eye-signing/
+keystore-password.txt
+
+# Agent scratch (screenshots of a person's phone!)
+shot.jpg
+shot.png
+shot.json
+shot.jpg.json
+photo.jpg
+*.shot.json
+live/
+__pycache__/
+*.pyc
+
+# Logs and local state
+*.log
+READY.txt
+.env
+*.env
+.private/
+agent/.env
+
+# IDE
+.idea/
+*.iml
+.DS_Store

@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Accessibility capabilities phone-eye asks Android for — declared, not assumed:
+   - canPerformGestures:      tap / swipe / long-press (the hand)
+   - canTakeScreenshot:       /shot (the eyes)
+   - canRetrieveWindowContent:/ui, tap_text, typing into the focused field
+  Touch exploration is deliberately NOT requested: it would change how the owner's
+  own touches behave, and phone-eye must never surprise the hand holding the phone.
+-->
+<accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:accessibilityEventTypes="typeWindowStateChanged|typeWindowContentChanged|typeWindowsChanged"
+    android:accessibilityFeedbackType="feedbackGeneric"
+    android:accessibilityFlags="flagRetrieveInteractiveWindows|flagReportViewIds"
+    android:canPerformGestures="true"
+    android:canRetrieveWindowContent="true"
+    android:canTakeScreenshot="true"
+    android:description="@string/accessibility_description"
+    android:isAccessibilityTool="true"
+    android:notificationTimeout="100" />

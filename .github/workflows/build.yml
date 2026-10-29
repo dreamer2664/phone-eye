@@ -1,0 +1,95 @@
+name: build
+
+# Why CI builds the APK (pc-eye's F16 lesson, phone edition): the interesting failures
+# live on the platform you are not sitting at. This workflow compiles the real thing
+# with the real Android toolchain, runs the contract tests + docs gate, and produces
+# the installable APK. What it cannot do is prove a tap landed — /selftest and
+# delivered=true do that on the phone, and PHONE-EYE.md's first-run test is the ritual.
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate Gradle wrapper
+        uses: gradle/actions/wrapper-validation@v3
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK packages
+        uses: android-actions/setup-android@v3
+        with:
+          packages: "platforms;android-35 build-tools;35.0.0"
+
+      - name: Docs must not drift from the code
+        run: |
+          python3 tools/check_docs.py
+
+      - name: Agent client smoke test (compiles, self-documents, refuses without the two lines)
+        run: |
+          python3 -m py_compile agent/phone_client.py
+          python3 agent/phone_client.py --help >/dev/null
+          python3 agent/phone_client.py state 2>&1 | grep -q "PHONE_EYE_URL" || { echo "client should refuse without URL/TOKEN"; exit 1; }
+          echo "client smoke ok"
+
+      - name: Decode release keystore (if configured)
+        env:
+          KEYSTORE_B64: ${{ secrets.PHONE_EYE_KEYSTORE_B64 }}
+        run: |
+          if [ -n "$KEYSTORE_B64" ]; then
+            echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/phone-eye-keystore.p12"
+            echo "PHONE_EYE_KEYSTORE=$RUNNER_TEMP/phone-eye-keystore.p12" >> "$GITHUB_ENV"
+            echo "release signing: dedicated keystore from secrets"
+          else
+            echo "release signing: NO secret configured — release falls back to the debug key (forks! see docs/BUILDING.md)"
+          fi
+
+      - name: Build + contract tests
+        env:
+          PHONE_EYE_KEYSTORE_PASSWORD: ${{ secrets.PHONE_EYE_KEYSTORE_PASSWORD }}
+          PHONE_EYE_KEY_ALIAS: ${{ secrets.PHONE_EYE_KEY_ALIAS }}
+          PHONE_EYE_KEY_PASSWORD: ${{ secrets.PHONE_EYE_KEY_PASSWORD }}
+        run: |
+          chmod +x gradlew
+          ./gradlew :app:testDebugUnitTest :app:assembleDebug :app:assembleRelease --stacktrace
+
+      - name: Name the APKs like releases, hash them like evidence
+        run: |
+          VERSION=$(grep -o 'versionName = "[^"]*"' app/build.gradle.kts | cut -d'"' -f2)
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          mkdir -p dist
+          cp app/build/outputs/apk/release/app-release.apk "dist/phone-eye-v${VERSION}.apk"
+          cp app/build/outputs/apk/debug/app-debug.apk "dist/phone-eye-v${VERSION}-debug.apk"
+          (cd dist && sha256sum *.apk > SHA256SUMS.txt && cat SHA256SUMS.txt)
+
+      - name: Upload APKs as workflow artifacts (every build)
+        uses: actions/upload-artifact@v4
+        with:
+          name: phone-eye-apks
+          path: dist/
+          if-no-files-found: error
+
+      - name: Publish GitHub Release (tag builds only)
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" dist/phone-eye-v${VERSION}.apk dist/SHA256SUMS.txt \
+            --title "phone-eye ${GITHUB_REF_NAME}" \
+            --notes "Install phone-eye-v${VERSION}.apk on the phone (allow 'install unknown apps' for your browser/files app), open it, do the 4-item setup checklist, tap Start, and give your agent the URL + TOKEN lines plus PHONE-EYE.md. Full instructions: README.md in the repo. Android 11+, arm64."

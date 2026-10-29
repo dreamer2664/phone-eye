@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">phone-eye</string>
+    <string name="accessibility_label">phone-eye hand (tap, swipe, screenshots)</string>
+    <string name="accessibility_description">Lets the agent you invited see this phone\'s screen and tap/swipe on it while phone-eye is running. Without it, phone-eye can report info and files but cannot show or touch the screen. You can turn this off here at any time — that is a second off switch.</string>
+    <string name="notif_channel_running">phone-eye session</string>
+    <string name="notif_channel_agent">Agent messages</string>
+</resources>
