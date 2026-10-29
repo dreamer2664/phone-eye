@@ -84,6 +84,15 @@ else:
     if gs.group(1) not in fetch:
         failures.append("scripts/fetch-cloudflared.sh does not carry the same cloudflared SHA-256 as Gradle")
 
+# 5b. Kotlin nested-comment trap: a wildcard URL inside a block comment opens a
+# nested comment (Kotlin block comments nest) and the file silently stops parsing
+# at the class below it. Cost exactly one red CI build (2026-10-29); now mechanical.
+for kt in ROOT.glob("app/src/**/*.kt"):
+    for i, line in enumerate(kt.read_text(encoding="utf-8").splitlines(), 1):
+        if line.lstrip().startswith("*") and "://*" in line:
+            failures.append(f"{kt.relative_to(ROOT)}:{i} wildcard URL inside a block comment "
+                            f"('://*' opens a nested /* in Kotlin — write 'a trycloudflare URL' in prose)")
+
 # 5. README pointers
 if "PHONE-EYE.md" not in readme:
     failures.append("README.md does not point agents at PHONE-EYE.md")

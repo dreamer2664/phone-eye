@@ -7,9 +7,9 @@ import android.content.Context
  * leave a dead URL on the screen.
  *
  * Order (mirrors pc-eye first, then the no-binary fallbacks):
- *   1. Cloudflare quick tunnel  → https://*.trycloudflare.com   (needs the binary)
- *   2. localhost.run (SSH)       → https://*.lhr.life            (pure Java)
- *   3. serveo.net (SSH)          → https://*.serveousercontent.com
+ *   1. Cloudflare quick tunnel  → a trycloudflare.com URL   (needs the binary)
+ *   2. localhost.run (SSH)       → an lhr.life URL           (pure Java)
+ *   3. serveo.net (SSH)          → a serveousercontent.com URL
  *   4. LAN only — said out loud: an agent outside this network cannot reach the
  *      phone, exactly like pc-eye's launcher when its tunnel fails. Retried every
  *      minute while the session runs, because phone networks change under you.
