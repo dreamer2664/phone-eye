@@ -9,6 +9,7 @@ import java.net.InetAddress
 import java.net.URL
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicReference
 
 /**
  * A Cloudflare quick tunnel (*.trycloudflare.com, no account) from an Android app —
@@ -97,7 +98,7 @@ class CloudflareQuickTunnel(
         process = proc
 
         val ready = CountDownLatch(1)
-        @Volatile var lastError = ""
+        val lastErrorRef = AtomicReference("")
 
         Thread({
             try {
@@ -113,7 +114,7 @@ class CloudflareQuickTunnel(
                     lines.forEach { line ->
                         EyeLog.log("cloudflared> ${line.take(300)}")
                         if (line.contains("Registered tunnel connection")) ready.countDown()
-                        if (line.contains(" ERR ")) lastError = line.take(300)
+                        if (line.contains(" ERR ")) lastErrorRef.set(line.take(300))
                     }
                 }
             } catch (e: Exception) { }
@@ -126,14 +127,14 @@ class CloudflareQuickTunnel(
                 val wasUp = url
                 url = null
                 process = null
-                val reason = "cloudflared exited (code $code)${if (lastError.isNotEmpty()) ": $lastError" else ""}"
+                val reason = "cloudflared exited (code $code)${lastErrorRef.get().let { if (it.isNotEmpty()) ": $it" else "" }}"
                 EyeLog.log("tunnel/cloudflare: $reason")
                 if (wasUp != null) onExit(reason)
             }
         }, "phoneeye-cf-exit").apply { isDaemon = true }.start()
 
         val got = ready.await(timeoutMs, TimeUnit.MILLISECONDS)
-        if (!got || !proc.isAlive || !hasRegistered(lastError, proc)) {
+        if (!got || !proc.isAlive || !hasRegistered(lastErrorRef.get(), proc)) {
             // hasRegistered distinguishes "counted down because registered" from
             // "counted down because the process died": if it died, isAlive is false.
             val alive = proc.isAlive
@@ -142,7 +143,7 @@ class CloudflareQuickTunnel(
                 throw Refusal(
                     503,
                     "cloudflared did not register a tunnel connection within ${timeoutMs / 1000}s" +
-                    (if (lastError.isNotEmpty()) ". Last error it printed: $lastError" else "") +
+                    (lastErrorRef.get().let { if (it.isNotEmpty()) ". Last error it printed: $it" else "" }) +
                     ". The full cloudflared output is in the on-phone log (GET /log). " +
                     "Port 7844 blocked by this network, or a proxy in the way, are the usual causes."
                 )

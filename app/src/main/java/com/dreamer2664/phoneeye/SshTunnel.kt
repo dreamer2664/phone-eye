@@ -18,6 +18,7 @@ import java.security.PublicKey
 import java.security.Security
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicReference
 
 /**
  * The fallback tunnels: SSH remote-port-forwards to the free, no-account services
@@ -161,17 +162,16 @@ class SshReverseTunnel(
         session = sess
 
         val foundLatch = CountDownLatch(1)
-        @Volatile var foundUrl: String? = null
+        val foundRef = AtomicReference<String?>(null)
         val onLine: (String) -> Unit = { raw ->
             val line = stripAnsi(raw)
-            if (foundUrl == null) {
+            if (foundRef.get() == null) {
                 val m = urlPattern.find(line)
                 if (m != null) {
                     val candidate = m.value
                     val candidateHost = candidate.removePrefix("https://").substringBefore('/')
                     if (candidateHost !in rejectHosts) {
-                        foundUrl = candidate
-                        foundLatch.countDown()
+                        if (foundRef.compareAndSet(null, candidate)) foundLatch.countDown()
                     }
                 }
             }
@@ -203,7 +203,7 @@ class SshReverseTunnel(
         EyeLog.log("tunnel/ssh: $providerName forward bound (requested :80, service answered :${forward.port}); waiting for its URL banner ...")
 
         val announced = foundLatch.await(timeoutMs, TimeUnit.MILLISECONDS)
-        val u = foundUrl
+        val u = foundRef.get()
         if (!announced || u == null) {
             disconnectQuietly()
             throw Refusal(

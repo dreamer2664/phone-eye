@@ -53,6 +53,7 @@ import java.util.Locale
 import java.util.TimeZone
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicReference
 
 /**
  * Everything the phone will let an unprivileged app do, each behind its own
@@ -299,19 +300,18 @@ object Device {
             val order = listOf("fused", LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER)
             val provider = order.firstOrNull { usable.contains(it) } ?: usable.first()
             val latch = CountDownLatch(1)
-            @Volatile var got: Location? = null
+            val gotRef = AtomicReference<Location?>(null)
             val thread = HandlerThread("phoneeye-loc")
             thread.start()
             val listener = object : LocationListener {
-                override fun onLocationChanged(loc: Location) { got = loc; latch.countDown() }
+                override fun onLocationChanged(loc: Location) { gotRef.set(loc); latch.countDown() }
                 override fun onProviderEnabled(p: String) { }
                 override fun onProviderDisabled(p: String) { }
             }
             try {
                 lm.requestLocationUpdates(provider, 0L, 0f, listener, thread.looper)
-                if (latch.await(timeoutMs, TimeUnit.MILLISECONDS) && got != null) {
-                    best = got
-                    fresh = true
+                if (latch.await(timeoutMs, TimeUnit.MILLISECONDS)) {
+                    gotRef.get()?.let { best = it; fresh = true }
                 }
             } catch (e: SecurityException) {
                 throw Refusal(409, "location permission was revoked while reading — see /selftest")
@@ -602,7 +602,7 @@ object Device {
         sortOrder: String?, limit: Int
     ): JSONArray {
         val arr = JSONArray()
-        val cursor: Cursor? = ctx.contentResolver.query(uri, projection, null, null, sortOrder)
+        val cursor = ctx.contentResolver.query(uri, projection, null, null, sortOrder)
             ?: throw Refusal(503, "the content provider returned no cursor for $uri")
         cursor.use { c ->
             var count = 0

@@ -12,6 +12,8 @@ import android.view.accessibility.AccessibilityNodeInfo
 import java.io.ByteArrayOutputStream
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicReference
 
 /**
  * The eyes and the hand — everything pc-eye does with ImageGrab + SetCursorPos,
@@ -76,8 +78,8 @@ class PhoneAccessibilityService : AccessibilityService() {
     @Synchronized
     fun captureShot(maxWidth: Int, quality: Int, png: Boolean): ShotData {
         val latch = CountDownLatch(1)
-        @Volatile var bitmap: Bitmap? = null
-        @Volatile var failure: Refusal? = null
+        val bitmapRef = AtomicReference<Bitmap?>(null)
+        val failureRef = AtomicReference<Refusal?>(null)
 
         takeScreenshot(
             Display.DEFAULT_DISPLAY, mainExecutor,
@@ -87,15 +89,15 @@ class PhoneAccessibilityService : AccessibilityService() {
                     try {
                         val wrapped = Bitmap.wrapHardwareBuffer(hw, result.colorSpace)
                         if (wrapped == null) {
-                            failure = Refusal(503, "Android returned a screenshot buffer this phone could not decode")
+                            failureRef.set(Refusal(503, "Android returned a screenshot buffer this phone could not decode"))
                         } else {
                             // Copy off the hardware buffer here (main thread); compression
                             // happens on the request thread after the latch.
-                            bitmap = wrapped.copy(Bitmap.Config.ARGB_8888, false)
+                            bitmapRef.set(wrapped.copy(Bitmap.Config.ARGB_8888, false))
                             wrapped.recycle()
                         }
                     } catch (e: Exception) {
-                        failure = Refusal(503, "screenshot decode failed: ${e.javaClass.simpleName}: ${e.message}")
+                        failureRef.set(Refusal(503, "screenshot decode failed: ${e.javaClass.simpleName}: ${e.message}"))
                     } finally {
                         try { hw.close() } catch (e: Exception) { }
                         latch.countDown()
@@ -103,7 +105,7 @@ class PhoneAccessibilityService : AccessibilityService() {
                 }
 
                 override fun onFailure(errorCode: Int) {
-                    failure = when (errorCode) {
+                    failureRef.set(when (errorCode) {
                         ERROR_TAKE_SCREENSHOT_INTERVAL_TIME_SHORT -> Refusal(
                             429,
                             "Android throttles accessibility screenshots and this one came too soon after the last. " +
@@ -122,7 +124,7 @@ class PhoneAccessibilityService : AccessibilityService() {
                             "screenshot failed with Android error $errorCode — common causes: screen off, " +
                             "or a FLAG_SECURE screen (banking/password apps draw black/refuse capture by design)."
                         )
-                    }
+                    })
                     latch.countDown()
                 }
             }
@@ -131,8 +133,8 @@ class PhoneAccessibilityService : AccessibilityService() {
         if (!latch.await(8, TimeUnit.SECONDS)) {
             throw Refusal(503, "screenshot timed out after 8s — the phone may be asleep or the screenshot service is stuck")
         }
-        failure?.let { throw it }
-        val full = bitmap ?: throw Refusal(503, "screenshot produced no image and no error — treat the phone as asleep and tell the human")
+        failureRef.get()?.let { throw it }
+        val full = bitmapRef.get() ?: throw Refusal(503, "screenshot produced no image and no error — treat the phone as asleep and tell the human")
 
         try {
             val fullW = full.width
@@ -172,20 +174,20 @@ class PhoneAccessibilityService : AccessibilityService() {
      */
     private fun dispatchStroke(path: Path, durationMs: Long): Boolean {
         val latch = CountDownLatch(1)
-        @Volatile var delivered = false
+        val deliveredRef = AtomicBoolean(false)
         val stroke = GestureDescription.StrokeDescription(path, 0, durationMs.coerceIn(1, 60_000))
         val gesture = GestureDescription.Builder().addStroke(stroke).build()
         val accepted = dispatchGesture(
             gesture,
             object : AccessibilityService.GestureResultCallback() {
-                override fun onCompleted(g: GestureDescription?) { delivered = true; latch.countDown() }
-                override fun onCancelled(g: GestureDescription?) { delivered = false; latch.countDown() }
+                override fun onCompleted(g: GestureDescription?) { deliveredRef.set(true); latch.countDown() }
+                override fun onCancelled(g: GestureDescription?) { deliveredRef.set(false); latch.countDown() }
             },
             null
         )
         if (!accepted) return false
         latch.await(durationMs + 5_000, TimeUnit.MILLISECONDS)
-        return delivered
+        return deliveredRef.get()
     }
 
     fun tap(x: Int, y: Int, durationMs: Long): Boolean {
