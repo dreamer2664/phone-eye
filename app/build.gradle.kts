@@ -79,6 +79,14 @@ android {
             excludes += setOf(
                 "META-INF/*.SF", "META-INF/*.DSA", "META-INF/*.RSA", "META-INF/INDEX.LIST"
             )
+            // The three Bouncy Castle jars each carry this same multi-release OSGi manifest;
+            // AGP refuses to guess which one wins, so pick the first (it's metadata Android
+            // never reads). Same story for the licence texts several jars ship.
+            pickFirsts += setOf(
+                "META-INF/versions/9/OSGI-INF/MANIFEST.MF",
+                "META-INF/OSGI-INF/MANIFEST.MF",
+                "META-INF/LICENSE.txt", "META-INF/LICENSE", "META-INF/NOTICE.txt", "META-INF/NOTICE"
+            )
         }
     }
 }
