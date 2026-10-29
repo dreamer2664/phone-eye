@@ -25,7 +25,7 @@ Health text, no auth. Says version, uptime, tunnel provider. `curl $PHONE_EYE_UR
 Cheap status, **no pixel capture** — poll it freely.
 
 ```json
-{"ok":true,"version":"1.0.0","dry_run":false,"at":"…Z",
+{"ok":true,"version":"1.0.1","dry_run":false,"at":"…Z",
  "device":"Pixel 8","os":"Android 15 (sdk 35)","screen":[1080,2400],"rotation_deg":0,
  "screen_on":true,"locked":false,"accessibility_bound":true,
  "capture_ok":true,"capture_why":null,"foreground_package":"com.example.app",
@@ -55,7 +55,7 @@ curl -H "X-Token: $T" "$PHONE_EYE_URL/shot?changed=9f3ac41b02d4e7a0"  # 304 whil
 Exercises capture for real (one small probe frame), then reports:
 
 ```json
-{"ok":true,"version":"1.0.0","dry_run":false,
+{"ok":true,"version":"1.0.1","dry_run":false,
  "checks":[{"name":"capture","ok":true,"detail":"320x711 18234B (probe frame)","core":true}, …],
  "note":"ok = every CORE check green…"}
 ```
@@ -77,7 +77,7 @@ Exactly one action per request. General refusals: `409` coordinate outside `0≤
 | `type` | `text` ≤20 000 chars | — | **appends** to the currently focused editable field via ACTION_SET_TEXT; no focus → 409 (nothing typed). Reply: `typed_chars` |
 | `paste` | `text` ≤200 000 | — | sets clipboard, then pastes into focused field; no focus → 409 (clipboard holds text, **nothing pasted** — the sentence says which half happened). Reply: `pasted:true` |
 | `key` | `key` | `times` 1–100 (1) | one of: `back` `home` `recents` `notifications` `quick_settings` `power` `lock` `enter` `wake` `volume_up` `volume_down`. `enter` inserts `\n` into the focused field (no raw Enter exists); `wake` turns the screen on to the lockscreen; volume keys ride AudioManager (music stream) |
-| `tap_text` | `text` ≤200 | `index` 0–50 (0) | finds the index-th visible node whose text/description matches (findAccessibilityNodeInfosByText semantics: substring, case-insensitive per Android); ACTION_CLICK on it/clickable ancestor if possible, else centre taps. Reply: `matched`, `tapped_at`, `via`. No match → `404` with the match count |
+| `tap_text` | `text` ≤200 | `index` 0–50 (0) | finds the index-th visible node whose text/description contains the query; Android's `findAccessibilityNodeInfosByText` goes first, and if it returns no visible match (some launcher/widget trees), phone-eye falls back to walking the same tree `/ui` prints and matching `text` or `contentDescription` case-insensitively. ACTION_CLICK on it/clickable ancestor if possible, else centre taps. Reply: `matched`, `tapped_at`, `via`. No match → `404` with the match count |
 
 `{"action":"move",…}` is deliberately a **409**: phones have no cursor; the message explains the delivered+screenshot verification story. Unknown actions/keys → 400 with the full list.
 

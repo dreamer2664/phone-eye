@@ -22,8 +22,8 @@ android {
         applicationId = "com.dreamer2664.phoneeye"
         minSdk = 30          // Android 11: first release with AccessibilityService.takeScreenshot()
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 2
+        versionName = "1.0.1"
         multiDexEnabled = true
         ndk {
             // The bundled cloudflared binary is arm64 only (see fetchCloudflared below).

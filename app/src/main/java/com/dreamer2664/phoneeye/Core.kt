@@ -11,7 +11,7 @@ import java.util.Base64
  * rate limiter that fails OPEN so a broken limiter can never lock the owner out.
  */
 object Core {
-    const val VERSION = "1.0.0"
+    const val VERSION = "1.0.1"
     const val PORT = 8791 // pc-eye is 8790; the phone is 8791. A matched pair, on purpose.
 
     /** 32 hex chars = 128 bits from SecureRandom (pc-eye: secrets.token_hex(16)). */

@@ -2,6 +2,12 @@
 
 Append-only. Correcting an old entry means adding a new one, not editing history.
 
+## 1.0.1 — 2026-10-29
+
+**Live-acceptance fix.** The owner's first on-device run proved the core chain end to end (selftest, screenshots, converted taps, typing/pasting, gestures, Settings navigation, files, shell, location, clipboard rules, toast/notification/vibrate/torch, and a rear-camera photo). It also found one honest mismatch: on the launcher, `/ui` could show widget words that Android's `findAccessibilityNodeInfosByText` would not return to `tap_text`, so `tap_text` correctly refused 404 instead of guessing.
+
+- `tap_text` now falls back, only when Android's search finds no visible match, to a manual walk of the same accessibility tree `/ui` prints, matching `text` or `contentDescription` case-insensitively and requiring non-empty on-screen bounds. The returned `matched` label prefers whichever field actually matched.
+
 ## 1.0.0 — 2026-10-29
 
 **First release. pc-eye's contract, ported to Android's rules.**

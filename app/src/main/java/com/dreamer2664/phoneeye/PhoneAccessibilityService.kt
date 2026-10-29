@@ -10,6 +10,7 @@ import android.view.Display
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import java.io.ByteArrayOutputStream
+import java.util.Locale
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
@@ -255,6 +256,12 @@ class PhoneAccessibilityService : AccessibilityService() {
      * Tap by words, not pixels: find a visible node whose text/description matches,
      * click it (or its clickable parent), else tap its centre on the glass.
      * Far safer for an agent than aiming at a downscaled screenshot when it works.
+     *
+     * Android's own findAccessibilityNodeInfosByText is the first try, but on the
+     * owner's launcher it returned no match for visible widget text that /ui could
+     * plainly see (live-found, 2026-10-29). So when Android's search comes up empty,
+     * walk the very tree /ui prints and match text/contentDescription ourselves.
+     * The words an agent can read in /ui should be the words tap_text can find.
      */
     fun tapText(query: String, index: Int): TapTextResult {
         val root = rootInActiveWindow
@@ -263,7 +270,33 @@ class PhoneAccessibilityService : AccessibilityService() {
         try {
             root.findAccessibilityNodeInfosByText(query)?.let { found.addAll(it) }
         } catch (e: Exception) { }
-        val visible = found.filter { it.isVisibleToUser }
+        var visible = found.filter { it.isVisibleToUser }
+        if (visible.isEmpty()) {
+            val needle = query.trim().lowercase(Locale.ROOT)
+            if (needle.isNotEmpty()) {
+                val manual = mutableListOf<AccessibilityNodeInfo>()
+                val stack = ArrayDeque<AccessibilityNodeInfo>()
+                stack.add(root)
+                var visited = 0
+                while (stack.isNotEmpty() && visited < 3000) {
+                    val n = stack.removeLast()
+                    visited++
+                    if (n.isVisibleToUser) {
+                        val text = n.text?.toString().orEmpty()
+                        val desc = n.contentDescription?.toString().orEmpty()
+                        if (needle in text.lowercase(Locale.ROOT) || needle in desc.lowercase(Locale.ROOT)) {
+                            val r = Rect()
+                            try { n.getBoundsInScreen(r) } catch (e: Exception) { }
+                            if (r.width() > 0 && r.height() > 0) manual.add(n)
+                        }
+                    }
+                    val kids = mutableListOf<AccessibilityNodeInfo>()
+                    for (i in 0 until n.childCount) n.getChild(i)?.let { kids.add(it) }
+                    for (k in kids.asReversed()) stack.add(k)
+                }
+                visible = manual
+            }
+        }
         val node = visible.getOrNull(index)
             ?: throw Refusal(
                 404,
@@ -274,7 +307,16 @@ class PhoneAccessibilityService : AccessibilityService() {
         node.getBoundsInScreen(rect)
         val cx = rect.centerX()
         val cy = rect.centerY()
-        val label = (node.text?.toString() ?: node.contentDescription?.toString() ?: query)
+        val textLabel = node.text?.toString().orEmpty()
+        val descLabel = node.contentDescription?.toString().orEmpty()
+        val trimmedQuery = query.trim()
+        val label = when {
+            textLabel.contains(trimmedQuery, ignoreCase = true) -> textLabel
+            descLabel.contains(trimmedQuery, ignoreCase = true) -> descLabel
+            textLabel.isNotBlank() -> textLabel
+            descLabel.isNotBlank() -> descLabel
+            else -> query
+        }
         // Prefer a real ACTION_CLICK on the node or a clickable ancestor: it cannot miss.
         var cursor: AccessibilityNodeInfo? = node
         var hops = 0
